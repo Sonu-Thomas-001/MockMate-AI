@@ -1,0 +1,8 @@
+{
+  "name": "MockMate AI",
+  "description": "A professional AI-powered interview simulator that provides real-time feedback, scoring, and improvement tips for technical and behavioral interviews.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
