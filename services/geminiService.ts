@@ -7,48 +7,64 @@ const feedbackSchema = {
   properties: {
     feedback: {
       type: Type.STRING,
-      description: "Comprehensive feedback on the candidate's performance.",
+      description: "Detailed feedback paragraph.",
+    },
+    summaryQuote: {
+      type: Type.STRING,
+      description: "A 1-2 sentence high-level summary of the candidate's performance, written in third person. e.g. 'Candidate demonstrated strong technical basics but lacked confidence...'",
     },
     score: {
       type: Type.NUMBER,
       description: "Overall interview performance score (0-100).",
     },
-    structureScore: {
+    technicalScore: {
       type: Type.NUMBER,
-      description: "Average structure score (1-10).",
+      description: "Rating of technical knowledge and accuracy (0-100).",
+    },
+    communicationScore: {
+      type: Type.NUMBER,
+      description: "Rating of language fluency and articulation (0-100).",
+    },
+    problemSolvingScore: {
+      type: Type.NUMBER,
+      description: "Rating of logical thinking and approach (0-100).",
     },
     clarityScore: {
       type: Type.NUMBER,
-      description: "Average clarity and articulation score (1-10).",
+      description: "Rating of answer structure and clarity (0-100).",
     },
     confidenceScore: {
       type: Type.NUMBER,
-      description: "Average confidence score (1-10).",
+      description: "Rating of vocal confidence and delivery (0-100).",
     },
     keyStrengths: {
       type: Type.ARRAY,
       items: { type: Type.STRING },
-      description: "List of 3 key strengths demonstrated.",
+      description: "List of 3 specific strengths demonstrated.",
     },
     keyWeaknesses: {
       type: Type.ARRAY,
       items: { type: Type.STRING },
-      description: "List of 3 areas for improvement.",
+      description: "List of 3 specific areas for improvement.",
     },
   },
-  required: ["feedback", "score", "structureScore", "clarityScore", "confidenceScore", "keyStrengths", "keyWeaknesses"],
+  required: [
+    "feedback", "summaryQuote", "score", 
+    "technicalScore", "communicationScore", "problemSolvingScore", 
+    "clarityScore", "confidenceScore", 
+    "keyStrengths", "keyWeaknesses"
+  ],
 };
 
-// Legacy method for standard text/chat based interactions (if needed) or initial prompt setup
+// Legacy method for standard text/chat based interactions
 export const generateInterviewTurn = async (
   config: InterviewConfig,
   history: { role: string; parts: { text: string }[] }[],
   lastUserAnswer: string | null
 ): Promise<AnalysisResult> => {
-   // This acts as a fallback or initial state generator if we were using text mode. 
-   // For Live API, we primarily use this logic embedded in the system instruction.
    return {
-       score: 0, structureScore: 0, clarityScore: 0, confidenceScore: 0,
+       score: 0, technicalScore: 0, communicationScore: 0, problemSolvingScore: 0,
+       clarityScore: 0, confidenceScore: 0, summaryQuote: "",
        feedback: "", improvedAnswer: "", keyStrengths: [], keyWeaknesses: [],
        nextQuestion: "Ready to start.", isInterviewOver: false
    };
@@ -74,7 +90,10 @@ export const generateFinalFeedback = async (
     Transcript:
     ${transcript}
     
-    Provide a comprehensive evaluation based on the candidate's answers.
+    Provide a comprehensive evaluation. 
+    - Rate specific skills (Technical, Communication, etc) on a 0-100 scale.
+    - The summaryQuote should be a direct, professional observation of the candidate's performance.
+    - Be strict but constructive.
   `;
 
   try {
@@ -90,7 +109,6 @@ export const generateFinalFeedback = async (
     const jsonText = response.text;
     if (!jsonText) throw new Error("Empty response from AI");
     
-    // Map the simple feedback schema to our AnalysisResult type
     const result = JSON.parse(jsonText);
     return {
         ...result,
@@ -101,6 +119,11 @@ export const generateFinalFeedback = async (
 
   } catch (error) {
     console.error("Gemini Analysis Error:", error);
-    throw error;
+    // Return a fallback result to avoid crashing UI
+    return {
+        score: 0, technicalScore: 0, communicationScore: 0, problemSolvingScore: 0,
+        clarityScore: 0, confidenceScore: 0, summaryQuote: "Analysis failed due to technical error.",
+        feedback: "Could not generate report.", keyStrengths: [], keyWeaknesses: []
+    };
   }
 };

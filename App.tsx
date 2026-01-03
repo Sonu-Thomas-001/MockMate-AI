@@ -2,10 +2,13 @@ import React, { useState } from 'react';
 import { SetupForm } from './components/SetupForm';
 import { InterviewChat } from './components/InterviewChat';
 import { SummaryReport } from './components/SummaryReport';
+import { HowItWorks } from './components/HowItWorks';
+import { Pricing } from './components/Pricing';
+import { About } from './components/About';
 import { InterviewConfig, Message } from './types';
 import { BrainCircuit } from 'lucide-react';
 
-type AppState = 'landing' | 'setup' | 'interview' | 'summary';
+type AppState = 'landing' | 'setup' | 'interview' | 'summary' | 'how-it-works' | 'pricing' | 'about';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>('landing');
@@ -43,10 +46,14 @@ const App: React.FC = () => {
               </span>
             </div>
             <nav className="hidden md:flex gap-6 text-sm font-medium text-slate-400">
-              <a href="#" className="hover:text-emerald-400 transition-colors">How it works</a>
-              <a href="#" className="hover:text-emerald-400 transition-colors">Pricing</a>
-              <a href="#" className="hover:text-emerald-400 transition-colors">About</a>
+              <button onClick={() => setAppState('how-it-works')} className={`transition-colors ${appState === 'how-it-works' ? 'text-emerald-400' : 'hover:text-emerald-400'}`}>How it works</button>
+              <button onClick={() => setAppState('pricing')} className={`transition-colors ${appState === 'pricing' ? 'text-emerald-400' : 'hover:text-emerald-400'}`}>Pricing</button>
+              <button onClick={() => setAppState('about')} className={`transition-colors ${appState === 'about' ? 'text-emerald-400' : 'hover:text-emerald-400'}`}>About</button>
             </nav>
+            {/* Mobile Menu Placeholder (Optional for future) */}
+            <div className="md:hidden">
+                {/* Simple mobile indicator or menu button could go here */}
+            </div>
           </div>
         </header>
       )}
@@ -101,6 +108,10 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
+
+        {appState === 'how-it-works' && <HowItWorks onBack={handleRestart} onStart={startSetup} />}
+        {appState === 'pricing' && <Pricing onBack={handleRestart} />}
+        {appState === 'about' && <About onBack={handleRestart} />}
 
         {appState === 'setup' && (
           <div className="flex-1 flex items-center justify-center p-4">

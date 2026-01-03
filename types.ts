@@ -19,13 +19,19 @@ export interface InterviewConfig {
   company?: string;
   topic?: string;
   mode: 'standard' | 'stress';
+  persona?: string;
+  voice?: string;
+  speed?: number;
 }
 
 export interface AnalysisResult {
   score: number; // Overall 0-100
-  structureScore: number; // 1-10
-  clarityScore: number; // 1-10
-  confidenceScore: number; // 1-10
+  technicalScore: number; // 0-100
+  communicationScore: number; // 0-100
+  problemSolvingScore: number; // 0-100
+  clarityScore: number; // 0-100
+  confidenceScore: number; // 0-100
+  summaryQuote: string;
   feedback: string;
   improvedAnswer?: string;
   keyStrengths: string[];

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
 import { InterviewConfig, Message } from '../types';
 import { generateFinalFeedback } from '../services/geminiService';
-import { PhoneOff, UserCircle2, Loader2, Activity, Video, VideoOff, Mic, MicOff, Clock, MessageSquare, ChevronDown, ChevronUp, Wind, Sparkles, AlertTriangle } from 'lucide-react';
+import { PhoneOff, UserCircle2, Loader2, Activity, Video, VideoOff, Mic, MicOff, Clock, MessageSquare, ChevronDown, ChevronUp, Wind, Sparkles, AlertTriangle, FileText, BrainCircuit } from 'lucide-react';
 
 interface InterviewChatProps {
   config: InterviewConfig;
@@ -10,6 +10,7 @@ interface InterviewChatProps {
 }
 
 type PrepStage = 'breath' | 'relax' | 'environment' | 'countdown' | 'live';
+type ProcessingStep = 'uploading' | 'analyzing' | 'generating';
 
 // --- Audio Helpers ---
 function createBlob(data: Float32Array): { data: string; mimeType: string } {
@@ -73,28 +74,61 @@ const WaveformVisualizer = ({ audioLevel }: { audioLevel: number }) => {
       canvas.height = height;
 
       ctx.clearRect(0, 0, width, height);
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = '#60a5fa'; // Blue-400
-      ctx.lineCap = 'round';
-      ctx.shadowBlur = 4;
-      ctx.shadowColor = '#3b82f6';
 
-      ctx.beginPath();
-      
       const centerY = height / 2;
-      // Dynamic amplitude based on audio input
-      const amplitude = Math.max(5, audioLevel * (height / 3)); 
-      const frequency = 0.02;
+      // Base amplitude allows for some movement even in silence, dynamic adds the punch
+      const baseAmplitude = height * 0.05;
+      const dynamicAmplitude = Math.max(baseAmplitude, audioLevel * (height * 0.4));
+      
+      // Define 3 overlapping waves for a "Gemini-like" organic feel
+      const waves = [
+        { color: 'rgba(52, 211, 153, 0.8)', speed: 0.1, freq: 0.01, ampFactor: 1.0 },   // Emerald (Primary)
+        { color: 'rgba(96, 165, 250, 0.6)', speed: 0.15, freq: 0.015, ampFactor: 0.7 }, // Blue (Secondary)
+        { color: 'rgba(167, 139, 250, 0.4)', speed: 0.07, freq: 0.008, ampFactor: 0.5 } // Purple (Background)
+      ];
 
-      for (let x = 0; x < width; x++) {
-        // Create a sine wave with some noise for an organic "voice" look
-        const y = centerY + Math.sin(x * frequency + phase) * amplitude * Math.sin(x * 0.01 + phase * 2);
-        if (x === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+      waves.forEach((wave, i) => {
+        ctx.beginPath();
+        ctx.strokeStyle = wave.color;
+        
+        // Dynamic line thickness based on audio level
+        ctx.lineWidth = 2 + (audioLevel * 4); 
+        ctx.lineCap = 'round';
+        
+        // Add glowing effect when audio is loud
+        if (audioLevel > 0.05) {
+            ctx.shadowBlur = 15 * audioLevel;
+            ctx.shadowColor = wave.color;
+        } else {
+            ctx.shadowBlur = 0;
+        }
+
+        for (let x = 0; x < width; x++) {
+          // Attenuation function: Tapers the wave to 0 at the left and right edges
+          // x=0 -> -1, x=width -> 1. Parabola opening down.
+          const attenuation = 1 - Math.pow((x / width) * 2 - 1, 2);
+          
+          const y = centerY + 
+            Math.sin(x * wave.freq + phase * wave.speed + i) * 
+            dynamicAmplitude * wave.ampFactor * 
+            Math.max(0, attenuation); // Ensure non-negative attenuation
+
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      });
+
+      // Subtle background ambient pulse in the center
+      if (audioLevel > 0.01) {
+          const gradient = ctx.createRadialGradient(width/2, centerY, 0, width/2, centerY, width * 0.3);
+          gradient.addColorStop(0, `rgba(16, 185, 129, ${0.1 * audioLevel})`);
+          gradient.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 0, width, height);
       }
       
-      ctx.stroke();
-      phase += 0.15; // Speed of the wave
+      phase += 0.5; // Speed of animation
       animationId = requestAnimationFrame(draw);
     };
 
@@ -102,12 +136,13 @@ const WaveformVisualizer = ({ audioLevel }: { audioLevel: number }) => {
     return () => cancelAnimationFrame(animationId);
   }, [audioLevel]);
 
-  return <canvas ref={canvasRef} className="w-full h-24 opacity-80" />;
+  return <canvas ref={canvasRef} className="w-full h-32" />;
 };
 
 export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete }) => {
   // State
   const [prepStage, setPrepStage] = useState<PrepStage>('breath');
+  const [processingStep, setProcessingStep] = useState<ProcessingStep | null>(null);
   const [countdown, setCountdown] = useState(3);
   const [isConnected, setIsConnected] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
@@ -208,6 +243,11 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
         You are MockMate AI, a professional corporate interviewer.
         Context: Role: ${config.role}, Type: ${config.type}, Company: ${config.company || 'Generic'}.
         
+        Adopt the following persona: ${config.persona || 'Professional'}.
+        ${config.persona === 'Stern' ? 'Be critical, direct, and rigorous. Do not sugarcoat.' : ''}
+        ${config.persona === 'Friendly' ? 'Be encouraging, warm, and patient.' : ''}
+        ${config.persona === 'Neutral' ? 'Be objective, formal, and unbiased.' : ''}
+
         Strict Rules:
         1. LANGUAGE: STRICTLY ENGLISH ONLY. Do not process or respond to non-English speech. If the user speaks another language, politely remind them to speak English.
         2. Keep responses concise (under 2 sentences usually).
@@ -220,7 +260,13 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
         config: {
           responseModalities: [Modality.AUDIO],
-          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
+          speechConfig: { 
+            voiceConfig: { 
+                prebuiltVoiceConfig: { 
+                    voiceName: config.voice || 'Kore',
+                } 
+            } 
+          },
           systemInstruction: { parts: [{ text: systemInstruction }] },
           inputAudioTranscription: {},
           outputAudioTranscription: {}
@@ -302,13 +348,21 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
                  const ctx = audioContextRef.current;
                  nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
                  const audioBuffer = await decodeAudioData(decode(base64Audio), ctx);
+                 
+                 // Apply speaking rate if needed (Note: This is a simple playback rate adjustment)
+                 // A true TTS rate change happens on the server, but for fine-tuning we can play with playbackRate
+                 const playbackRate = config.speed || 1.0; 
+                 
                  const source = ctx.createBufferSource();
                  source.buffer = audioBuffer;
+                 source.playbackRate.value = playbackRate; 
                  source.connect(ctx.destination);
                  source.onended = () => sourcesRef.current.delete(source);
                  source.start(nextStartTimeRef.current);
                  sourcesRef.current.add(source);
-                 nextStartTimeRef.current += audioBuffer.duration;
+                 
+                 // Adjust duration calculation based on speed
+                 nextStartTimeRef.current += (audioBuffer.duration / playbackRate);
              }
           },
           onclose: () => {
@@ -383,6 +437,7 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
 
   const handleEndInterview = async () => {
     setIsEnding(true);
+    setProcessingStep('uploading');
     stopLiveSession();
     
     // Push pending text
@@ -391,6 +446,11 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
     if (currentModelTextRef.current.trim()) finalHistory.push({ id: 'final-ai', role: 'assistant', content: currentModelTextRef.current, timestamp: Date.now() });
 
     try {
+        setProcessingStep('analyzing');
+        // Fake delay to show the "Processing" state clearly to the user
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        setProcessingStep('generating');
         const analysis = await generateFinalFeedback(config, finalHistory);
         if (finalHistory.length > 0) finalHistory[finalHistory.length - 1].analysis = analysis;
         onComplete(finalHistory);
@@ -399,6 +459,39 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
         onComplete(finalHistory);
     }
   };
+
+  // --- Processing / Analysis Screen ---
+  if (processingStep) {
+      return (
+          <div className="flex flex-col h-full items-center justify-center bg-slate-950 relative p-6">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-950 to-slate-950"></div>
+              <div className="z-10 text-center space-y-6 max-w-md w-full animate-fade-in">
+                  <div className="relative mx-auto w-24 h-24">
+                      <div className="absolute inset-0 border-4 border-slate-800 rounded-full"></div>
+                      <div className="absolute inset-0 border-4 border-t-emerald-500 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"></div>
+                      <BrainCircuit className="absolute inset-0 m-auto h-10 w-10 text-emerald-500 animate-pulse" />
+                  </div>
+                  
+                  <h2 className="text-2xl font-bold text-white">Analysis in Progress</h2>
+                  
+                  <div className="space-y-4 text-left bg-slate-900/50 p-6 rounded-xl border border-slate-800">
+                      <div className={`flex items-center gap-3 ${processingStep === 'uploading' ? 'text-emerald-400' : 'text-slate-500'}`}>
+                          <div className={`w-2 h-2 rounded-full ${processingStep === 'uploading' ? 'bg-emerald-400 animate-ping' : 'bg-slate-700'}`}></div>
+                          <span>Uploading session data...</span>
+                      </div>
+                      <div className={`flex items-center gap-3 ${processingStep === 'analyzing' ? 'text-emerald-400' : 'text-slate-500'}`}>
+                          <div className={`w-2 h-2 rounded-full ${processingStep === 'analyzing' ? 'bg-emerald-400 animate-ping' : 'bg-slate-700'}`}></div>
+                          <span>Processing interview audio...</span>
+                      </div>
+                      <div className={`flex items-center gap-3 ${processingStep === 'generating' ? 'text-emerald-400' : 'text-slate-500'}`}>
+                           <div className={`w-2 h-2 rounded-full ${processingStep === 'generating' ? 'bg-emerald-400 animate-ping' : 'bg-slate-700'}`}></div>
+                           <span>Generating comprehensive feedback report...</span>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      );
+  }
 
   // --- Prep Screen ---
   if (prepStage !== 'live') {
@@ -460,10 +553,17 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
             {/* Role Info - Bottom Left of Stage */}
             <div className="absolute bottom-10 left-6 md:left-10 text-left animate-fade-in">
                <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight mb-1">{config.role}</h1>
-               <p className="text-slate-400 text-lg flex items-center gap-2">
-                  <UserCircle2 className="w-5 h-5" />
-                  {config.company ? `${config.company} Interviewer` : 'Friendly Recruiter'}
-               </p>
+               <div className="flex flex-col gap-1">
+                   <p className="text-slate-400 text-lg flex items-center gap-2">
+                      <UserCircle2 className="w-5 h-5" />
+                      {config.company ? `${config.company} Interviewer` : 'Friendly Recruiter'}
+                   </p>
+                   {config.persona && (
+                       <span className="text-xs text-emerald-400 bg-emerald-950/50 border border-emerald-900/50 px-2 py-1 rounded w-fit">
+                           {config.persona} Mode
+                       </span>
+                   )}
+               </div>
             </div>
 
             {/* End Call Button - Bottom Right of Stage (Floating) */}

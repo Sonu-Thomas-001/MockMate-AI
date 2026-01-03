@@ -1,8 +1,8 @@
 import React from 'react';
-import { Message } from '../types';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { Message, AnalysisResult } from '../types';
+import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend } from 'recharts';
 import { Button } from './Button';
-import { Trophy, RotateCcw, Download, Mic, Activity, Brain } from 'lucide-react';
+import { RotateCcw, CheckCircle2, AlertTriangle, Quote, Brain, Mic, Code, Lightbulb, TrendingUp } from 'lucide-react';
 
 interface SummaryReportProps {
   messages: Message[];
@@ -10,122 +10,173 @@ interface SummaryReportProps {
 }
 
 export const SummaryReport: React.FC<SummaryReportProps> = ({ messages, onRestart }) => {
-  // Extract analysis data only from Assistant messages that have analysis
-  const analyses = messages
-    .filter(m => m.role === 'assistant' && m.analysis)
-    .map((m, index) => ({
-      question: `Q${index + 1}`,
-      score: m.analysis?.score || 0,
-      confidence: m.analysis?.confidenceScore ? m.analysis.confidenceScore * 10 : 0, // Scale to 100
-      clarity: m.analysis?.clarityScore ? m.analysis.clarityScore * 10 : 0, // Scale to 100
-      feedback: m.analysis?.feedback
-    }));
+  // Get the final analysis from the last message (Assistant)
+  const finalMessage = messages.slice().reverse().find(m => m.role === 'assistant' && m.analysis);
+  const analysis: AnalysisResult | undefined = finalMessage?.analysis;
 
-  const averageScore = Math.round(
-    analyses.reduce((acc, curr) => acc + curr.score, 0) / (analyses.length || 1)
-  );
+  if (!analysis) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-10 text-center">
+        <h2 className="text-xl text-slate-300 mb-4">No analysis data available.</h2>
+        <Button onClick={onRestart}>Back to Home</Button>
+      </div>
+    );
+  }
+
+  // Data for Radar Chart
+  const radarData = [
+    { subject: 'Technical', A: analysis.technicalScore || 0, fullMark: 100 },
+    { subject: 'Communication', A: analysis.communicationScore || 0, fullMark: 100 },
+    { subject: 'Problem Solving', A: analysis.problemSolvingScore || 0, fullMark: 100 },
+    { subject: 'Confidence', A: analysis.confidenceScore || 0, fullMark: 100 },
+    { subject: 'Clarity', A: analysis.clarityScore || 0, fullMark: 100 },
+  ];
+
+  // Helper for Circular Score Color
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return 'text-emerald-400 stroke-emerald-500';
+    if (score >= 60) return 'text-yellow-400 stroke-yellow-500';
+    return 'text-red-400 stroke-red-500';
+  };
+
+  const scoreColor = getScoreColor(analysis.score);
+  const circumference = 2 * Math.PI * 40; // r=40
+  const strokeDashoffset = circumference - (analysis.score / 100) * circumference;
 
   return (
-    <div className="max-w-5xl mx-auto p-6 animate-fade-in pb-20">
-      <div className="text-center mb-10">
-        <div className="inline-flex items-center justify-center p-4 bg-emerald-500/10 rounded-full border border-emerald-500/30 mb-4">
-          <Trophy className="h-10 w-10 text-emerald-500" />
+    <div className="max-w-7xl mx-auto p-4 md:p-8 animate-fade-in pb-20 font-sans">
+      
+      {/* Header */}
+      <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+           <h1 className="text-3xl font-bold text-white mb-1">Interview Analysis</h1>
+           <p className="text-slate-400">Detailed breakdown of your performance</p>
         </div>
-        <h1 className="text-3xl font-bold text-white mb-2">Interview Feedback Dashboard</h1>
-        <p className="text-slate-400">Comprehensive analysis of your performance.</p>
-      </div>
-
-      {/* Score Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 flex flex-col items-center justify-center">
-          <span className="text-slate-400 text-sm font-medium mb-2 uppercase tracking-wide">Overall Readiness</span>
-          <span className={`text-5xl font-bold ${averageScore >= 70 ? 'text-emerald-400' : 'text-yellow-400'}`}>
-            {averageScore}%
-          </span>
-        </div>
-        
-        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 flex flex-col items-center justify-center">
-             <Mic className="h-6 w-6 text-blue-400 mb-2" />
-             <span className="text-2xl font-bold text-white">
-                {Math.round(analyses.reduce((acc, c) => acc + c.clarity, 0) / (analyses.length || 1))}%
-             </span>
-             <span className="text-xs text-slate-500 mt-1">Voice Clarity</span>
-        </div>
-
-        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 flex flex-col items-center justify-center">
-             <Activity className="h-6 w-6 text-purple-400 mb-2" />
-             <span className="text-2xl font-bold text-white">
-                {Math.round(analyses.reduce((acc, c) => acc + c.confidence, 0) / (analyses.length || 1))}%
-             </span>
-             <span className="text-xs text-slate-500 mt-1">Confidence</span>
-        </div>
-
-        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 flex flex-col items-center justify-center">
-             <Brain className="h-6 w-6 text-pink-400 mb-2" />
-             <span className="text-2xl font-bold text-white">{analyses.length}</span>
-             <span className="text-xs text-slate-500 mt-1">Questions Analyzed</span>
-        </div>
-      </div>
-
-      {/* Charts */}
-      <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-8">
-            <h3 className="text-slate-200 font-medium mb-4">Performance Trend</h3>
-            <div className="h-64 w-full min-h-[250px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={analyses}>
-                  <defs>
-                    <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                  <XAxis dataKey="question" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} domain={[0, 100]} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }}
-                    itemStyle={{ color: '#10b981' }}
-                  />
-                  <Area type="monotone" dataKey="score" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorScore)" name="Overall Score" />
-                  <Area type="monotone" dataKey="confidence" stroke="#a855f7" strokeWidth={2} fillOpacity={0} name="Confidence" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-      </div>
-
-      {/* Detailed Question Review */}
-      <div className="space-y-6">
-        <h2 className="text-xl font-semibold text-white mb-4">Detailed Question Analysis</h2>
-        {analyses.length > 0 ? (
-          analyses.map((item, idx) => (
-            <div key={idx} className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-              <div className="flex justify-between items-start mb-3">
-                <h4 className="font-semibold text-slate-200">Question {idx + 1}</h4>
-                <div className="flex gap-2">
-                  <span className={`px-2 py-1 rounded text-xs font-bold ${
-                      item.score >= 80 ? 'bg-emerald-500/20 text-emerald-400' :
-                      item.score >= 60 ? 'bg-yellow-500/20 text-yellow-400' :
-                      'bg-red-500/20 text-red-400'
-                  }`}>
-                      Score: {item.score}
-                  </span>
-                </div>
-              </div>
-              <p className="text-slate-400 text-sm leading-relaxed">{item.feedback}</p>
-            </div>
-          ))
-        ) : (
-          <div className="text-slate-500 text-center py-10 bg-slate-800/30 rounded-lg">
-            No analysis data available. Complete more questions to see trends.
-          </div>
-        )}
-      </div>
-
-      <div className="mt-10 flex justify-center gap-4">
         <Button variant="secondary" onClick={onRestart}>
-          <RotateCcw className="mr-2 h-4 w-4" /> Start New Session
+            <RotateCcw className="mr-2 h-4 w-4" /> New Session
         </Button>
       </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        
+        {/* Left Column: Overall Score & Quote */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-xl flex flex-col justify-between relative overflow-hidden">
+             <div className="absolute top-0 right-0 p-6 opacity-5">
+                 <Brain className="w-32 h-32 text-white" />
+             </div>
+
+             <div>
+                <h3 className="text-lg font-semibold text-slate-200 mb-6 border-b border-slate-800 pb-2">Overall Score</h3>
+                <div className="flex justify-center py-4">
+                    <div className="relative w-40 h-40 flex items-center justify-center">
+                        <svg className="w-full h-full transform -rotate-90">
+                            <circle cx="50%" cy="50%" r="40" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-slate-800" />
+                            <circle 
+                                cx="50%" cy="50%" r="40" 
+                                stroke="currentColor" strokeWidth="8" fill="transparent" 
+                                strokeDasharray={circumference} 
+                                strokeDashoffset={strokeDashoffset} 
+                                strokeLinecap="round"
+                                className={`transition-all duration-1000 ease-out ${scoreColor.split(' ')[1]}`} 
+                            />
+                        </svg>
+                        <div className="absolute flex flex-col items-center">
+                            <span className={`text-5xl font-bold ${scoreColor.split(' ')[0]}`}>{analysis.score}</span>
+                            <span className="text-slate-500 text-sm font-medium">/ 100</span>
+                        </div>
+                    </div>
+                </div>
+             </div>
+             
+             <div className="mt-8 bg-slate-800/50 rounded-xl p-5 border border-slate-700/50 relative">
+                 <Quote className="absolute -top-3 -left-2 w-8 h-8 text-slate-600 bg-slate-900 rounded-full p-1" />
+                 <p className="text-slate-300 italic text-sm leading-relaxed text-center px-2">
+                    "{analysis.summaryQuote}"
+                 </p>
+             </div>
+        </div>
+
+        {/* Right Column: Skill Breakdown (Radar Chart) */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col">
+            <h3 className="text-lg font-semibold text-slate-200 mb-4 border-b border-slate-800 pb-2">Skill Breakdown</h3>
+            <div className="flex-1 w-full h-[300px] md:h-full min-h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
+                        <PolarGrid stroke="#334155" />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 12, fontWeight: 500 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                        <Radar
+                            name="Candidate"
+                            dataKey="A"
+                            stroke="#3b82f6"
+                            strokeWidth={3}
+                            fill="#3b82f6"
+                            fillOpacity={0.2}
+                        />
+                    </RadarChart>
+                </ResponsiveContainer>
+            </div>
+        </div>
+      </div>
+
+      {/* Strengths & Weaknesses Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          
+          {/* Strengths */}
+          <div className="bg-slate-900 border border-emerald-900/30 rounded-2xl p-6 shadow-xl relative overflow-hidden group">
+              <div className="absolute inset-0 bg-emerald-950/5 group-hover:bg-emerald-950/10 transition-colors"></div>
+              <div className="relative z-10">
+                  <h3 className="flex items-center gap-2 text-lg font-bold text-emerald-400 mb-6">
+                      <CheckCircle2 className="w-6 h-6" /> Top Strengths
+                  </h3>
+                  <div className="space-y-4">
+                      {analysis.keyStrengths?.map((strength, i) => (
+                          <div key={i} className="flex gap-3 items-start">
+                              <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                              <p className="text-slate-300 text-sm leading-relaxed">{strength}</p>
+                          </div>
+                      ))}
+                      {(!analysis.keyStrengths || analysis.keyStrengths.length === 0) && (
+                          <p className="text-slate-500 italic">No specific strengths detected.</p>
+                      )}
+                  </div>
+              </div>
+          </div>
+
+          {/* Areas for Growth */}
+          <div className="bg-slate-900 border border-amber-900/30 rounded-2xl p-6 shadow-xl relative overflow-hidden group">
+              <div className="absolute inset-0 bg-amber-950/5 group-hover:bg-amber-950/10 transition-colors"></div>
+              <div className="relative z-10">
+                  <h3 className="flex items-center gap-2 text-lg font-bold text-amber-400 mb-6">
+                      <AlertTriangle className="w-6 h-6" /> Areas for Growth
+                  </h3>
+                  <div className="space-y-4">
+                      {analysis.keyWeaknesses?.map((weakness, i) => (
+                          <div key={i} className="flex gap-3 items-start">
+                              <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                              <p className="text-slate-300 text-sm leading-relaxed">{weakness}</p>
+                          </div>
+                      ))}
+                       {(!analysis.keyWeaknesses || analysis.keyWeaknesses.length === 0) && (
+                          <p className="text-slate-500 italic">No specific areas for growth detected.</p>
+                      )}
+                  </div>
+              </div>
+          </div>
+
+      </div>
+      
+      {/* Footer / Detailed Feedback */}
+      <div className="mt-6 bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-xl">
+           <h3 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+               <TrendingUp className="w-5 h-5 text-indigo-400" /> 
+               Comprehensive Feedback
+           </h3>
+           <p className="text-slate-300 leading-relaxed text-sm md:text-base">
+               {analysis.feedback}
+           </p>
+      </div>
+
     </div>
   );
 };
