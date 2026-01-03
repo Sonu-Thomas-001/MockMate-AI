@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { InterviewConfig, AnalysisResult, Message } from "../types";
+import { InterviewConfig, AnalysisResult, Message, InterviewType } from "../types";
 
 // Schema for the final summary report
 const feedbackSchema = {
@@ -83,17 +83,39 @@ export const generateFinalFeedback = async (
 
   const transcript = messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n');
 
+  let promptContext = "";
+
+  if (config.type === InterviewType.COMMUNICATION_SIMPLE) {
+      promptContext = `
+        IMPORTANT: This was a "Simple Communication Interview" for early-career students.
+        
+        Evaluation Guidelines:
+        - Use VERY SIMPLE language in the feedback. No corporate jargon.
+        - Focus heavily on "Communication Score" and "Confidence Score".
+        - Ignore deep technical accuracy; focus on clarity, sentence structure, and comfort level.
+        - Provide encouraging "Strengths" and polite "Areas for Improvement".
+        - The "summaryQuote" should be simple and direct.
+      `;
+  } else {
+      promptContext = `
+        Evaluation Guidelines:
+        - Be strict but constructive.
+        - Evaluate professional readiness for a ${config.role} role.
+        - Rate specific skills (Technical, Communication, etc) critically.
+        - The summaryQuote should be a direct, professional observation.
+      `;
+  }
+
   const prompt = `
-    Analyze the following interview transcript for a ${config.role} role.
+    Analyze the following interview transcript.
     Interview Context: ${config.type}, Difficulty: ${config.difficulty}.
+    
+    ${promptContext}
     
     Transcript:
     ${transcript}
     
-    Provide a comprehensive evaluation. 
-    - Rate specific skills (Technical, Communication, etc) on a 0-100 scale.
-    - The summaryQuote should be a direct, professional observation of the candidate's performance.
-    - Be strict but constructive.
+    Provide a comprehensive evaluation JSON based on the schema.
   `;
 
   try {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
-import { InterviewConfig, Message } from '../types';
+import { GoogleGenAI, LiveServerMessage } from "@google/genai";
+import { InterviewConfig, Message, InterviewType } from '../types';
 import { generateFinalFeedback } from '../services/geminiService';
 import { PhoneOff, UserCircle2, Loader2, Activity, Video, VideoOff, Mic, Clock, MessageSquare, ChevronDown, ChevronUp, Wind, AlertTriangle, BrainCircuit, Check, Wifi, Cpu } from 'lucide-react';
 
@@ -234,64 +234,103 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
       streamRef.current = stream;
 
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      
       const company = config.company || 'HCL TechBee';
-      
-      const systemInstruction = `
-        System Role:
-        You are MockMate AI – Interview Board, simulating a real ${company} managerial interview panel.
-        
-        You must behave like:
-        - A corporate IT manager.
-        - Interviewing candidates for ${config.role || 'Class XII / early-career'} roles.
-        - Evaluating communication, attitude, clarity, and intent.
-        - NOT expecting deep technical expertise.
-        
-        Tone:
-        - Polite, Professional, Calm, Evaluative (not friendly coaching).
-        - Persona: ${config.persona || 'Professional'}.
 
-        Core Interview Board Rules (MANDATORY):
-        1. Interview-First, Feedback-Later: Do NOT guide or correct answers during the interview. No hints, no examples, no suggestions mid-session. Feedback is delivered only after the interview ends.
-        2. One Question at a Time: Ask a single question. Wait for a complete response. Detect completion via pause.
-        3. Natural Manager Behavior: Use short acknowledgements like “Alright”, “Okay”, “Understood”. Do NOT praise or criticize mid-interview.
-        4. Language: STRICTLY ENGLISH ONLY. If the user speaks another language, politely remind them to speak English.
+      // --- SYSTEM INSTRUCTION LOGIC ---
+      let systemInstruction = "";
 
-        Interview Structure (STRICT ORDER):
-        Phase 1: Opening
-        - Say: “Good morning. This interview is for the ${company} program. Please answer clearly and honestly. Let’s begin.”
-        - Pause and wait for the user to acknowledge.
+      if (config.type === InterviewType.COMMUNICATION_SIMPLE) {
+          // SIMPLE COMMUNICATION INTERVIEW BOARD PROMPT
+          systemInstruction = `
+            System Role:
+            You are MockMate AI, acting as a friendly corporate interviewer conducting a basic communication screening interview for early-career IT students (TechBee aspirants).
 
-        Phase 2: Core Mandatory Questions
-        Ask exactly in this order:
-        1. “Tell me about yourself.”
-        2. “What do you know about ${company}?”
-        3. “What do you know about the TechBee program, and why did you choose it?”
-        4. “Where do you see yourself in the next five to ten years?”
-        5. “Why do you want to become a software engineer?”
+            Your purpose is not to test knowledge, but to assess:
+            - Spoken clarity
+            - Sentence formation
+            - Confidence
+            - Willingness to communicate
 
-        Phase 3: Controlled Follow-Ups
-        - Ask only ONE follow-up if: Answer is too short, sounds memorized, lacks clarity, or misses intent.
-        - Approved styles: “Can you explain that further?”, “Could you give a specific example?”, “What do you mean by that?”
-        - ❌ Do NOT ask multiple follow-ups.
-        - ❌ Do NOT reframe the question with hints.
+            Tone & Behavior:
+            - Calm, Friendly, Neutral
+            - Encouraging but NOT coaching
+            - Use short acknowledgements only: “Okay.”, “Alright.”, “I understand.”
 
-        Phase 4: Closing
-        - Say: “Thank you. This concludes the interview.”
-        - Then stop asking questions.
+            Interview Rules:
+            1. Ask simple, open-ended questions.
+            2. One question at a time.
+            3. Let the student finish completely. No interruptions.
+            4. No corrections or suggestions mid-interview.
+            5. IMMEDIATE START: When the session connects, you must IMMEDIATELY greeting the candidate and start Phase 1.
 
-        Question Bank (Use these ONLY if specific deviation is needed or for variation):
-        - “Why do you want to join ${company} specifically?”
-        - “What do you understand about working and studying together?”
-        - “How do you handle pressure or deadlines?”
-        - “What is the difference between software and hardware?”
-        - “What is an operating system?”
-      `;
+            INTERVIEW FLOW:
+            Phase 1: Opening
+            - Say: "Hi. This will be a short conversation to understand your communication skills. Please speak comfortably. Let’s begin."
+            - Pause briefly, then move to Phase 2.
+
+            Phase 2: Simple Questions
+            - Ask 5-6 questions ONLY, chosen randomly from the list below.
+            
+            Question Bank:
+            A. Warm-Up: "Please introduce yourself." OR "Tell me about where you are from."
+            B. Daily Life: "How do you usually spend your free time?" OR "Describe a normal day in your life."
+            C. Basic Thinking: "Why did you choose this course or program?" OR "What do you enjoy learning the most?"
+            D. Confidence Check: "What is one thing you are proud of?" OR "Tell me about a challenge you faced and how you handled it."
+
+            Phase 3: Closing
+            - Say: "Thank you. That’s all for now."
+            - Then stop asking questions.
+          `;
+      } else {
+          // DEFAULT / MANAGERIAL / TECHBEE INTERVIEW BOARD PROMPT
+          systemInstruction = `
+            System Role:
+            You are MockMate AI – Interview Board, simulating a real ${company} managerial interview panel.
+            
+            You must behave like:
+            - A corporate IT manager.
+            - Interviewing candidates for ${config.role || 'Class XII / early-career'} roles.
+            - Evaluating communication, attitude, clarity, and intent.
+            - NOT expecting deep technical expertise.
+            
+            Tone:
+            - Polite, Professional, Calm, Evaluative (not friendly coaching).
+            - Persona: ${config.persona || 'Professional'}.
+
+            Core Interview Board Rules (MANDATORY):
+            1. Interview-First, Feedback-Later: Do NOT guide or correct answers during the interview. No hints mid-session.
+            2. One Question at a Time: Ask a single question. Wait for a complete response.
+            3. Natural Manager Behavior: Use short acknowledgements like “Alright”, “Okay”.
+            4. Language: STRICTLY ENGLISH ONLY.
+            5. IMMEDIATE START: When the session connects, you must IMMEDIATELY greeting the candidate and start Phase 1.
+
+            Interview Structure (STRICT ORDER):
+            Phase 1: Opening
+            - Say: “Good morning. This interview is for the ${company} program. Please answer clearly and honestly. Let’s begin.”
+            - Pause briefly, then immediately move to Phase 2.
+
+            Phase 2: Core Mandatory Questions
+            Ask exactly in this order:
+            1. “Tell me about yourself.”
+            2. “What do you know about ${company}?”
+            3. “What do you know about the TechBee program, and why did you choose it?”
+            4. “Where do you see yourself in the next five to ten years?”
+            5. “Why do you want to become a software engineer?”
+
+            Phase 3: Controlled Follow-Ups
+            - Ask only ONE follow-up if: Answer is too short, sounds memorized, lacks clarity.
+            - Approved styles: “Can you explain that further?”, “Could you give a specific example?”
+
+            Phase 4: Closing
+            - Say: “Thank you. This concludes the interview.”
+            - Then stop asking questions.
+          `;
+      }
 
       const sessionPromise = ai.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
         config: {
-          responseModalities: [Modality.AUDIO],
+          responseModalities: ['AUDIO'],
           speechConfig: { 
             voiceConfig: { 
                 prebuiltVoiceConfig: { 
@@ -299,15 +338,23 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
                 } 
             } 
           },
-          // Fix: systemInstruction should be a string directly, not wrapped in parts for the live config
-          systemInstruction: systemInstruction,
+          systemInstruction: { parts: [{ text: systemInstruction }] },
           inputAudioTranscription: {},
           outputAudioTranscription: {}
         },
         callbacks: {
-          onopen: () => {
+          onopen: async () => {
             setIsConnected(true);
             setError(null);
+            
+            // Trigger the bot to start immediately
+            try {
+                const session = await sessionPromise;
+                session.send({ parts: [{ text: "The candidate is connected. Start the interview immediately with Phase 1: Opening." }], turnComplete: true });
+            } catch (e) {
+                console.error("Failed to send start trigger", e);
+            }
+
             if (!inputAudioContextRef.current) return;
             
             const source = inputAudioContextRef.current.createMediaStreamSource(stream);

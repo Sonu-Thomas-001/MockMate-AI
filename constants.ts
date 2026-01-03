@@ -3,7 +3,8 @@ import { InterviewType, Difficulty } from './types';
 export const INITIAL_GREETING = "Hello. I am your interviewer for today. I've reviewed your profile. Let's begin with a simple introduction.";
 
 export const INTERVIEW_TYPES = [
-  { value: InterviewType.TECHBEE, label: 'TechBee / Early Career Program' },
+  { value: InterviewType.TECHBEE, label: 'TechBee / Early Career Program (Managerial)' },
+  { value: InterviewType.COMMUNICATION_SIMPLE, label: 'Simple Communication (TechBee Prep)' },
   { value: InterviewType.CAMPUS, label: 'Campus Placement / Fresher' },
   { value: InterviewType.TRAINEE, label: 'IT Support / Software Trainee' },
   { value: InterviewType.MANAGERIAL, label: 'Managerial Round (General)' },

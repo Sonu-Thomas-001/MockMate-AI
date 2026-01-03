@@ -1,5 +1,6 @@
 export enum InterviewType {
   TECHBEE = 'TechBee / Early Career',
+  COMMUNICATION_SIMPLE = 'Simple Communication (TechBee Prep)',
   CAMPUS = 'Campus Fresher',
   TRAINEE = 'IT Support / Software Trainee',
   MANAGERIAL = 'Managerial Round',
