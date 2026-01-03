@@ -1,19 +1,19 @@
 import { InterviewType, Difficulty } from './types';
 
-export const INITIAL_GREETING = "I'm ready to start your interview. I'll act as a strict but fair interviewer. Good luck.";
+export const INITIAL_GREETING = "Hello. I am your interviewer for today. I've reviewed your profile. Let's begin with a simple introduction.";
 
 export const INTERVIEW_TYPES = [
-  { value: InterviewType.BEHAVIORAL, label: 'Behavioral (STAR Method)' },
-  { value: InterviewType.TECHNICAL, label: 'Technical Knowledge' },
-  { value: InterviewType.SYSTEM_DESIGN, label: 'System Design' },
-  { value: InterviewType.CODING, label: 'Coding Concepts & DSA' },
+  { value: InterviewType.TECHBEE, label: 'TechBee / Early Career Program' },
+  { value: InterviewType.CAMPUS, label: 'Campus Placement / Fresher' },
+  { value: InterviewType.TRAINEE, label: 'IT Support / Software Trainee' },
+  { value: InterviewType.MANAGERIAL, label: 'Managerial Round (General)' },
+  { value: InterviewType.BEHAVIORAL, label: 'HR / Behavioral' },
 ];
 
 export const DIFFICULTIES = [
-  { value: Difficulty.JUNIOR, label: 'Junior (0-2 years)' },
-  { value: Difficulty.MID, label: 'Mid-Level (2-5 years)' },
-  { value: Difficulty.SENIOR, label: 'Senior (5+ years)' },
-  { value: Difficulty.STAFF, label: 'Staff/Principal' },
+  { value: Difficulty.FRESHER, label: 'Fresher (0-1 year)' },
+  { value: Difficulty.JUNIOR, label: 'Junior (1-2 years)' },
+  { value: Difficulty.MID, label: 'Mid-Level (3+ years)' },
 ];
 
 export const MOCK_CHART_DATA = [

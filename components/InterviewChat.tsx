@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { InterviewConfig, Message, AnalysisResult } from '../types';
 import { generateInterviewTurn } from '../services/geminiService';
 import { Button } from './Button';
-import { FeedbackCard } from './FeedbackCard';
-import { Mic, Send, Video, MicOff, VideoOff, Volume2, User } from 'lucide-react';
+import { Mic, Video, MicOff, VideoOff, Volume2, Square, VolumeX, PhoneOff, UserCircle2 } from 'lucide-react';
 
 interface InterviewChatProps {
   config: InterviewConfig;
@@ -12,43 +11,84 @@ interface InterviewChatProps {
 
 export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete }) => {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [currentQuestion, setCurrentQuestion] = useState<string>('');
   const [inputText, setInputText] = useState('');
-  const [isLoading, setIsLoading] = useState(true); // Loading first question
-  const [isRecording, setIsRecording] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   
   // Camera/Self-view state
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraEnabled, setCameraEnabled] = useState(false);
 
-  // Auto-scroll
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  // Speech Recognition
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
-  const scrollToBottom = () => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, isLoading]);
+  // TTS State
+  const [isMuted, setIsMuted] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
 
   // Initial Startup
   useEffect(() => {
     const startSession = async () => {
       try {
-        // Setup Camera if possible (simulated immersion)
         setupCamera();
-        
-        // Fetch first question
+        // Initial setup for speech recognition
+        if (typeof window !== 'undefined') {
+          const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+          if (SpeechRecognition) {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true; // Changed to true for live captioning effect
+            recognition.lang = 'en-US';
+
+            recognition.onresult = (event: any) => {
+              let interimTranscript = '';
+              let finalTranscript = '';
+
+              for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                  finalTranscript += event.results[i][0].transcript;
+                } else {
+                  interimTranscript += event.results[i][0].transcript;
+                }
+              }
+              
+              // We append final transcript to state, and show interim in UI
+              if (finalTranscript) {
+                  setInputText(prev => prev + (prev ? ' ' : '') + finalTranscript);
+              }
+              
+              // For UI visualization only - we might want a separate state for "live preview"
+              // But for simplicity, we rely on inputText updates or a separate ref if we wanted perfect "streaming" text
+            };
+
+            recognition.onerror = (event: any) => {
+              console.error('Speech recognition error', event.error);
+              setIsListening(false);
+            };
+
+            recognition.onend = () => {
+              setIsListening(false);
+            };
+
+            recognitionRef.current = recognition;
+          }
+        }
+
         const result = await generateInterviewTurn(config, [], null);
         
         const initialMessage: Message = {
-          id: Date.now().toString(),
-          role: 'assistant',
-          content: result.nextQuestion,
-          timestamp: Date.now(),
-          analysis: undefined // First message has no analysis
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: result.nextQuestion,
+            timestamp: Date.now(),
+            analysis: result // Store analysis even if not shown
         };
+        
         setMessages([initialMessage]);
+        setCurrentQuestion(result.nextQuestion);
+        speak(result.nextQuestion);
+        
       } catch (e) {
         console.error("Failed to start", e);
       } finally {
@@ -59,9 +99,49 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
 
     return () => {
         stopCamera();
+        window.speechSynthesis.cancel();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once
+  }, []);
+
+  // TTS Function
+  const speak = (text: string) => {
+      if (isMuted) return;
+      window.speechSynthesis.cancel(); 
+      const utterance = new SpeechSynthesisUtterance(text);
+      
+      const voices = window.speechSynthesis.getVoices();
+      // Try to find a professional sounding female/neutral voice
+      const preferredVoice = voices.find(v => v.name.includes('Google US English')) || 
+                             voices.find(v => v.name.includes('Samantha')) ||
+                             voices.find(v => v.lang === 'en-US');
+                             
+      if (preferredVoice) utterance.voice = preferredVoice;
+      utterance.rate = 1.0; // Normal pace
+      utterance.pitch = 1.0;
+
+      utterance.onstart = () => setSpeaking(true);
+      utterance.onend = () => setSpeaking(false);
+      
+      window.speechSynthesis.speak(utterance);
+  };
+
+  const toggleListening = () => {
+    if (!recognitionRef.current) {
+        alert("Speech recognition is not supported in this browser.");
+        return;
+    }
+
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      window.speechSynthesis.cancel();
+      setSpeaking(false);
+      recognitionRef.current.start();
+      setIsListening(true);
+    }
+  };
 
   const setupCamera = async () => {
     try {
@@ -85,6 +165,11 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
   const handleSendMessage = async () => {
     if (!inputText.trim()) return;
 
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    }
+    
     const userMsg: Message = {
       id: Date.now().toString(),
       role: 'user',
@@ -98,7 +183,7 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
     setIsLoading(true);
 
     try {
-      // Prepare history for API
+      // Build history for AI
       const history = newMessages.map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: m.role === 'assistant' ? `${m.analysis ? JSON.stringify(m.analysis) : ''} ${m.content}` : m.content }]
@@ -115,126 +200,132 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
       };
 
       setMessages(prev => [...prev, assistantMsg]);
+      setCurrentQuestion(analysis.nextQuestion);
+      speak(analysis.nextQuestion);
 
       if (analysis.isInterviewOver) {
-        // Wait a bit then finish
-        setTimeout(() => onComplete([...newMessages, assistantMsg]), 2000);
+        // Delay to let the TTS finish saying "Thank you..."
+        setTimeout(() => onComplete([...newMessages, assistantMsg]), 4000);
       }
 
     } catch (error) {
       console.error("Error fetching reply", error);
-      // Add error message to chat or show toast
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-      if(e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          handleSendMessage();
+  const toggleMute = () => {
+      if (!isMuted) {
+          window.speechSynthesis.cancel();
+          setSpeaking(false);
       }
-  }
+      setIsMuted(!isMuted);
+  };
 
   return (
-    <div className="flex flex-col h-full bg-slate-900">
-      {/* Header / Camera Bar */}
-      <div className="bg-slate-800 border-b border-slate-700 p-4 flex justify-between items-center shadow-md z-10">
-        <div>
-          <h2 className="text-white font-semibold flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            Live Interview: {config.role}
-          </h2>
-          <p className="text-xs text-slate-400">{config.type} • {config.difficulty}</p>
-        </div>
+    <div className="flex flex-col h-full bg-slate-900 relative overflow-hidden">
+      
+      {/* 1. Main Visual Area (Simulated Video Call) */}
+      <div className="flex-1 flex flex-col items-center justify-center relative p-6">
         
-        {/* Self View */}
-        <div className="relative w-32 h-24 bg-black rounded-lg overflow-hidden border border-slate-600 shadow-inner">
-           <video 
-             ref={videoRef} 
-             autoPlay 
-             muted 
-             playsInline 
-             className={`w-full h-full object-cover ${cameraEnabled ? 'opacity-100' : 'opacity-0'}`} 
-           />
-           {!cameraEnabled && (
-             <div className="absolute inset-0 flex items-center justify-center text-slate-500">
-               <VideoOff className="h-6 w-6" />
-             </div>
-           )}
-           <div className="absolute bottom-1 right-1 bg-black/50 px-1 rounded text-[10px] text-white">YOU</div>
+        {/* Interviewer Avatar / Placeholder */}
+        <div className="relative mb-8">
+            <div className={`w-32 h-32 md:w-48 md:h-48 rounded-full border-4 flex items-center justify-center bg-slate-800 shadow-2xl transition-all duration-500 ${speaking ? 'border-emerald-500 scale-105' : 'border-slate-700'}`}>
+                <UserCircle2 className="w-20 h-20 md:w-32 md:h-32 text-slate-500" />
+            </div>
+            {speaking && (
+                <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 bg-emerald-600 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded-full animate-pulse">
+                    Speaking
+                </div>
+            )}
         </div>
+
+        {/* AI Question Subtitles */}
+        <div className="max-w-3xl w-full text-center space-y-4 z-10">
+             <h2 className="text-2xl md:text-3xl font-medium text-white leading-relaxed drop-shadow-md transition-all">
+                "{currentQuestion}"
+             </h2>
+             {isLoading && (
+                 <p className="text-slate-400 text-sm animate-pulse">Thinking...</p>
+             )}
+        </div>
+
+        {/* User Self-View (Floating) */}
+        <div className="absolute top-4 right-4 w-32 md:w-48 aspect-video bg-black rounded-lg overflow-hidden border border-slate-700 shadow-2xl z-20">
+             <video 
+                ref={videoRef} 
+                autoPlay 
+                muted 
+                playsInline 
+                className={`w-full h-full object-cover transform scale-x-[-1] ${cameraEnabled ? 'opacity-100' : 'opacity-0'}`} 
+            />
+            <div className="absolute bottom-1 right-1 bg-black/60 px-1.5 py-0.5 rounded text-[10px] text-white font-medium">YOU</div>
+        </div>
+
       </div>
 
-      {/* Chat Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 container mx-auto max-w-4xl">
-        {messages.map((msg, idx) => (
-          <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-            <div className={`flex max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'} gap-3`}>
-              {/* Avatar */}
-              <div className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 ${msg.role === 'user' ? 'bg-indigo-600' : 'bg-emerald-600'}`}>
-                {msg.role === 'user' ? <User className="h-5 w-5 text-white" /> : <div className="font-bold text-white text-xs">AI</div>}
-              </div>
+      {/* 2. User Interaction Area (Bottom) */}
+      <div className="bg-slate-900/90 backdrop-blur-md border-t border-slate-800 p-6 pb-8 transition-all duration-300">
+        <div className="max-w-2xl mx-auto flex flex-col items-center gap-6">
+            
+            {/* Live Caption / Input Preview */}
+            <div className={`w-full text-center transition-all ${inputText ? 'opacity-100' : 'opacity-0'}`}>
+                <p className="text-lg text-emerald-400 font-medium italic">
+                    "{inputText}"
+                </p>
+            </div>
 
-              {/* Message Bubble */}
-              <div className="space-y-2">
-                {/* Text Content */}
-                <div className={`p-4 rounded-2xl shadow-sm ${
-                  msg.role === 'user' 
-                    ? 'bg-indigo-600 text-white rounded-tr-none' 
-                    : 'bg-slate-800 border border-slate-700 text-slate-100 rounded-tl-none'
-                }`}>
-                  <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+            {/* Controls Bar */}
+            <div className="flex items-center gap-6">
+                
+                {/* Mute Toggle */}
+                <button 
+                    onClick={toggleMute}
+                    className="p-4 rounded-full bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-all"
+                    title="Toggle Audio"
+                >
+                    {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
+                </button>
+
+                {/* Main Action Button (Mic / Stop) */}
+                <div className="relative group">
+                    <button 
+                        onClick={toggleListening}
+                        disabled={isLoading}
+                        className={`w-20 h-20 rounded-full flex items-center justify-center shadow-lg transition-all transform hover:scale-105 active:scale-95 ${
+                            isListening 
+                            ? 'bg-red-500 hover:bg-red-600 animate-pulse ring-4 ring-red-500/30' 
+                            : 'bg-emerald-600 hover:bg-emerald-500'
+                        }`}
+                    >
+                        {isListening ? <Square className="w-8 h-8 text-white fill-current" /> : <Mic className="w-8 h-8 text-white" />}
+                    </button>
+                    <span className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-xs font-medium text-slate-400 whitespace-nowrap">
+                        {isListening ? 'Tap to Send' : 'Tap to Speak'}
+                    </span>
                 </div>
 
-                {/* Analysis Card (Only for AI messages that have analysis) */}
-                {msg.analysis && (
-                  <FeedbackCard analysis={msg.analysis} />
-                )}
-              </div>
+                {/* End Call Button */}
+                <button 
+                    onClick={() => onComplete(messages)}
+                    className="p-4 rounded-full bg-slate-800 text-red-400 hover:bg-red-500/10 hover:text-red-500 transition-all"
+                    title="End Interview"
+                >
+                    <PhoneOff className="w-6 h-6" />
+                </button>
             </div>
-          </div>
-        ))}
-        
-        {isLoading && (
-          <div className="flex gap-3 max-w-[85%] animate-pulse">
-            <div className="h-10 w-10 rounded-full bg-emerald-600/50 flex-shrink-0"></div>
-            <div className="bg-slate-800/50 p-4 rounded-2xl rounded-tl-none h-16 w-32 border border-slate-700/50 flex items-center gap-2">
-               <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></span>
-               <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-75"></span>
-               <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-150"></span>
-            </div>
-          </div>
-        )}
-        <div ref={chatEndRef} />
-      </div>
 
-      {/* Input Area */}
-      <div className="bg-slate-800 border-t border-slate-700 p-4">
-        <div className="max-w-4xl mx-auto relative flex gap-2">
-          <textarea
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type your answer here..."
-            className="flex-1 bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none resize-none h-[60px] scrollbar-hide"
-            disabled={isLoading}
-          />
-          <div className="flex flex-col gap-2">
-            <Button 
-                variant="primary" 
-                size="md" 
-                className="h-full rounded-xl"
-                onClick={handleSendMessage}
-                disabled={!inputText.trim() || isLoading}
-            >
-                <Send className="h-5 w-5" />
-            </Button>
-          </div>
+            {/* Hidden Text Input for Fallback/Accessibility */}
+            <input 
+                type="text" 
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                className="w-full bg-transparent border-none text-transparent focus:ring-0 h-1"
+                aria-hidden="true"
+            />
         </div>
-        <p className="text-center text-slate-500 text-xs mt-2">
-            AI can make mistakes. Consider checking important information.
-        </p>
       </div>
     </div>
   );

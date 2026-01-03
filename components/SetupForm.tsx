@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { InterviewConfig, InterviewType, Difficulty } from '../types';
 import { INTERVIEW_TYPES, DIFFICULTIES } from '../constants';
 import { Button } from './Button';
-import { Briefcase, Building, Layers, Code, Play } from 'lucide-react';
+import { Briefcase, Building, Layers, Code, Play, Zap, Clock } from 'lucide-react';
 
 interface SetupFormProps {
   onStart: (config: InterviewConfig) => void;
@@ -11,10 +11,11 @@ interface SetupFormProps {
 export const SetupForm: React.FC<SetupFormProps> = ({ onStart }) => {
   const [config, setConfig] = useState<InterviewConfig>({
     role: '',
-    type: InterviewType.TECHNICAL,
-    difficulty: Difficulty.MID,
+    type: InterviewType.TECHBEE,
+    difficulty: Difficulty.FRESHER,
     company: '',
-    topic: ''
+    topic: '',
+    mode: 'standard'
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -31,8 +32,8 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onStart }) => {
           <div className="h-16 w-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-500/20">
             <Briefcase className="h-8 w-8 text-emerald-500" />
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">Configure Your Interview</h1>
-          <p className="text-slate-400">Tell us about the role you are targeting so we can tailor the questions.</p>
+          <h1 className="text-3xl font-bold text-white mb-2">Setup Your Interview</h1>
+          <p className="text-slate-400">Configure your session for MockMate AI.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -45,7 +46,7 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onStart }) => {
                 required
                 value={config.role}
                 onChange={(e) => setConfig({ ...config, role: e.target.value })}
-                placeholder="e.g. Frontend Engineer, Product Manager"
+                placeholder="e.g. Software Trainee, HCL TechBee Aspirant"
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 pl-10 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none"
               />
               <Briefcase className="absolute left-3 top-3.5 h-5 w-5 text-slate-500" />
@@ -55,7 +56,7 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onStart }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Interview Type */}
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-300">Interview Type</label>
+              <label className="block text-sm font-medium text-slate-300">Program / Interview Type</label>
               <div className="relative">
                 <select
                   value={config.type}
@@ -88,6 +89,32 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onStart }) => {
             </div>
           </div>
 
+          {/* Mode Selection */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-slate-300">Interview Mode</label>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                type="button"
+                onClick={() => setConfig({...config, mode: 'standard'})}
+                className={`p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${config.mode === 'standard' ? 'bg-emerald-600/20 border-emerald-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-emerald-500/50'}`}
+              >
+                <Briefcase className="h-6 w-6" />
+                <span className="font-medium text-sm">Manager Style</span>
+                <span className="text-xs opacity-70">Professional Voice Interview</span>
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => setConfig({...config, mode: 'stress'})}
+                className={`p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${config.mode === 'stress' ? 'bg-red-600/20 border-red-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-red-500/50'}`}
+              >
+                <Zap className="h-6 w-6" />
+                <span className="font-medium text-sm">Stress Mode</span>
+                <span className="text-xs opacity-70">Timed + Tougher Questions</span>
+              </button>
+            </div>
+          </div>
+
           {/* Optional Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
              <div className="space-y-2">
@@ -97,7 +124,7 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onStart }) => {
                   type="text"
                   value={config.company}
                   onChange={(e) => setConfig({ ...config, company: e.target.value })}
-                  placeholder="e.g. Google, Airbnb"
+                  placeholder="e.g. HCL, TCS, Infosys"
                   className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 pl-10 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 outline-none"
                 />
                 <Building className="absolute left-3 top-3.5 h-5 w-5 text-slate-500" />
@@ -111,7 +138,7 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onStart }) => {
                   type="text"
                   value={config.topic}
                   onChange={(e) => setConfig({ ...config, topic: e.target.value })}
-                  placeholder="e.g. React Hooks, AWS"
+                  placeholder="e.g. Basic Java, Communication"
                   className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 pl-10 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 outline-none"
                 />
                 <Layers className="absolute left-3 top-3.5 h-5 w-5 text-slate-500" />
@@ -121,7 +148,7 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onStart }) => {
 
           <div className="pt-4">
             <Button type="submit" size="lg" className="w-full">
-              Start Simulation
+              Enter Interview Room
               <Play className="ml-2 h-5 w-5" />
             </Button>
           </div>

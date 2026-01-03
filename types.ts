@@ -1,27 +1,31 @@
 export enum InterviewType {
-  BEHAVIORAL = 'Behavioral',
-  TECHNICAL = 'Technical',
-  SYSTEM_DESIGN = 'System Design',
-  CODING = 'Coding Concepts'
+  TECHBEE = 'TechBee / Early Career',
+  CAMPUS = 'Campus Fresher',
+  TRAINEE = 'IT Support / Software Trainee',
+  MANAGERIAL = 'Managerial Round',
+  BEHAVIORAL = 'Behavioral (HR)'
 }
 
 export enum Difficulty {
-  JUNIOR = 'Junior',
-  MID = 'Mid-Level',
-  SENIOR = 'Senior',
-  STAFF = 'Staff/Principal'
+  FRESHER = 'Fresher (0-1 year)',
+  JUNIOR = 'Junior (1-2 years)',
+  MID = 'Mid-Level (3-5 years)',
 }
 
 export interface InterviewConfig {
   role: string;
   type: InterviewType;
   difficulty: Difficulty;
-  company?: string; // Optional target company
-  topic?: string; // Specific focus (e.g., "React", "Distributed Systems")
+  company?: string;
+  topic?: string;
+  mode: 'standard' | 'stress'; // New mode selection
 }
 
 export interface AnalysisResult {
-  score: number; // 0-100
+  score: number; // Overall 0-100
+  structureScore: number; // 1-10
+  clarityScore: number; // 1-10
+  confidenceScore: number; // 1-10
   feedback: string;
   improvedAnswer: string;
   keyStrengths: string[];
@@ -33,8 +37,8 @@ export interface AnalysisResult {
 export interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
-  content: string; // Display content (question or answer)
-  analysis?: AnalysisResult; // Only present on assistant messages after a user turn
+  content: string;
+  analysis?: AnalysisResult;
   timestamp: number;
 }
 
