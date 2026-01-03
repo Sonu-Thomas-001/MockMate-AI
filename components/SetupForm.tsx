@@ -50,9 +50,18 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onStart }) => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (config.role) {
+      // Trigger Fullscreen for immersion
+      try {
+        if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+            await document.documentElement.requestFullscreen();
+        }
+      } catch (err) {
+        console.warn("Fullscreen request denied or not supported:", err);
+      }
+
       // Stop any playing audio before starting
       if (currentSourceRef.current) {
         currentSourceRef.current.stop();

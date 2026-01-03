@@ -99,7 +99,7 @@ export const SummaryReport: React.FC<SummaryReportProps> = ({ messages, onRestar
         {/* Right Column: Skill Breakdown (Radar Chart) */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col">
             <h3 className="text-lg font-semibold text-slate-200 mb-4 border-b border-slate-800 pb-2">Skill Breakdown</h3>
-            <div className="flex-1 w-full h-[300px] md:h-full min-h-[300px]">
+            <div className="w-full h-[350px]">
                 <ResponsiveContainer width="100%" height="100%">
                     <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
                         <PolarGrid stroke="#334155" />

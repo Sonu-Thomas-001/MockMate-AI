@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
 import { InterviewConfig, Message } from '../types';
 import { generateFinalFeedback } from '../services/geminiService';
-import { PhoneOff, UserCircle2, Loader2, Activity, Video, VideoOff, Mic, MicOff, Clock, MessageSquare, ChevronDown, ChevronUp, Wind, Sparkles, AlertTriangle, FileText, BrainCircuit } from 'lucide-react';
+import { PhoneOff, UserCircle2, Loader2, Activity, Video, VideoOff, Mic, Clock, MessageSquare, ChevronDown, ChevronUp, Wind, AlertTriangle, BrainCircuit, Check, Wifi, Cpu } from 'lucide-react';
 
 interface InterviewChatProps {
   config: InterviewConfig;
@@ -49,13 +49,13 @@ async function decodeAudioData(data: Uint8Array, ctx: AudioContext): Promise<Aud
   return buffer;
 }
 
-// Helper to filter non-English text (Latin-1 Supplement range covers English + accents, excludes Indic/CJK scripts)
+// Helper to filter non-English text
 function isEnglishText(text: string): boolean {
   return /^[\u0000-\u00FF\u2000-\u206F\s]*$/.test(text);
 }
 
-// --- Waveform Visualizer Component ---
-const WaveformVisualizer = ({ audioLevel }: { audioLevel: number }) => {
+// --- Modern Bar Visualizer Component ---
+const AudioVisualizer = ({ audioLevel }: { audioLevel: number }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   useEffect(() => {
@@ -65,70 +65,49 @@ const WaveformVisualizer = ({ audioLevel }: { audioLevel: number }) => {
     if (!ctx) return;
 
     let animationId: number;
-    let phase = 0;
+    const barCount = 32; // Number of bars (symmetric)
+    const bars: number[] = new Array(barCount).fill(0);
 
     const draw = () => {
-      // Resize handling
       const { width, height } = canvas.getBoundingClientRect();
       canvas.width = width;
       canvas.height = height;
-
       ctx.clearRect(0, 0, width, height);
 
-      const centerY = height / 2;
-      // Base amplitude allows for some movement even in silence, dynamic adds the punch
-      const baseAmplitude = height * 0.05;
-      const dynamicAmplitude = Math.max(baseAmplitude, audioLevel * (height * 0.4));
-      
-      // Define 3 overlapping waves for a "Gemini-like" organic feel
-      const waves = [
-        { color: 'rgba(52, 211, 153, 0.8)', speed: 0.1, freq: 0.01, ampFactor: 1.0 },   // Emerald (Primary)
-        { color: 'rgba(96, 165, 250, 0.6)', speed: 0.15, freq: 0.015, ampFactor: 0.7 }, // Blue (Secondary)
-        { color: 'rgba(167, 139, 250, 0.4)', speed: 0.07, freq: 0.008, ampFactor: 0.5 } // Purple (Background)
-      ];
+      // Smoothly interpolate bar heights based on current audio level
+      // We create a "fake" frequency distribution from the single RMS value
+      const center = width / 2;
+      const barWidth = 6;
+      const gap = 4;
+      const maxBarHeight = height * 0.8;
 
-      waves.forEach((wave, i) => {
-        ctx.beginPath();
-        ctx.strokeStyle = wave.color;
-        
-        // Dynamic line thickness based on audio level
-        ctx.lineWidth = 2 + (audioLevel * 4); 
-        ctx.lineCap = 'round';
-        
-        // Add glowing effect when audio is loud
-        if (audioLevel > 0.05) {
-            ctx.shadowBlur = 15 * audioLevel;
-            ctx.shadowColor = wave.color;
-        } else {
-            ctx.shadowBlur = 0;
-        }
-
-        for (let x = 0; x < width; x++) {
-          // Attenuation function: Tapers the wave to 0 at the left and right edges
-          // x=0 -> -1, x=width -> 1. Parabola opening down.
-          const attenuation = 1 - Math.pow((x / width) * 2 - 1, 2);
+      for (let i = 0; i < barCount / 2; i++) {
+          // Create a falloff effect where center bars are higher
+          const distanceFactor = 1 - (i / (barCount / 2)); 
+          const targetHeight = audioLevel * maxBarHeight * distanceFactor * (0.8 + Math.random() * 0.4);
           
-          const y = centerY + 
-            Math.sin(x * wave.freq + phase * wave.speed + i) * 
-            dynamicAmplitude * wave.ampFactor * 
-            Math.max(0, attenuation); // Ensure non-negative attenuation
+          // Smooth interpolation
+          bars[i] = bars[i] * 0.8 + targetHeight * 0.2;
 
-          if (x === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-      });
+          // Draw symmetric bars
+          const xRight = center + i * (barWidth + gap);
+          const xLeft = center - (i + 1) * (barWidth + gap);
+          const y = (height - bars[i]) / 2;
 
-      // Subtle background ambient pulse in the center
-      if (audioLevel > 0.01) {
-          const gradient = ctx.createRadialGradient(width/2, centerY, 0, width/2, centerY, width * 0.3);
-          gradient.addColorStop(0, `rgba(16, 185, 129, ${0.1 * audioLevel})`);
-          gradient.addColorStop(1, 'rgba(0,0,0,0)');
+          // Gradient
+          const gradient = ctx.createLinearGradient(0, y, 0, y + bars[i]);
+          gradient.addColorStop(0, '#34d399'); // Emerald 400
+          gradient.addColorStop(1, '#06b6d4'); // Cyan 500
+
           ctx.fillStyle = gradient;
-          ctx.fillRect(0, 0, width, height);
+          
+          // Rounded caps
+          ctx.beginPath();
+          ctx.roundRect(xRight, y, barWidth, Math.max(4, bars[i]), 4);
+          ctx.roundRect(xLeft, y, barWidth, Math.max(4, bars[i]), 4);
+          ctx.fill();
       }
-      
-      phase += 0.5; // Speed of animation
+
       animationId = requestAnimationFrame(draw);
     };
 
@@ -177,12 +156,21 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
   const currentModelTextRef = useRef("");
   const transcriptHistoryRef = useRef<Message[]>([]);
 
+  // Exit fullscreen on unmount
+  useEffect(() => {
+    return () => {
+        if (document.fullscreenElement) {
+            document.exitFullscreen().catch(e => console.error("Exit fullscreen error", e));
+        }
+    };
+  }, []);
+
   // Prep Sequence
   useEffect(() => {
     const sequence = async () => {
-        await new Promise(r => setTimeout(r, 2000)); setPrepStage('relax');
-        await new Promise(r => setTimeout(r, 2000)); setPrepStage('environment');
-        await new Promise(r => setTimeout(r, 1000)); setPrepStage('countdown');
+        // Breath (4s) -> Environment (3s) -> Countdown (3s)
+        await new Promise(r => setTimeout(r, 4000)); setPrepStage('environment');
+        await new Promise(r => setTimeout(r, 3500)); setPrepStage('countdown');
     };
     sequence();
   }, []);
@@ -234,26 +222,70 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
       audioContextRef.current = new AudioContextClass({ sampleRate: 24000 });
       inputAudioContextRef.current = new AudioContextClass({ sampleRate: 16000 });
 
+      // Ensure context is running
+      if (audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
+      }
+      if (inputAudioContextRef.current.state === 'suspended') {
+        await inputAudioContextRef.current.resume();
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
+      const company = config.company || 'HCL TechBee';
+      
       const systemInstruction = `
-        You are MockMate AI, a professional corporate interviewer.
-        Context: Role: ${config.role}, Type: ${config.type}, Company: ${config.company || 'Generic'}.
+        System Role:
+        You are MockMate AI – Interview Board, simulating a real ${company} managerial interview panel.
         
-        Adopt the following persona: ${config.persona || 'Professional'}.
-        ${config.persona === 'Stern' ? 'Be critical, direct, and rigorous. Do not sugarcoat.' : ''}
-        ${config.persona === 'Friendly' ? 'Be encouraging, warm, and patient.' : ''}
-        ${config.persona === 'Neutral' ? 'Be objective, formal, and unbiased.' : ''}
+        You must behave like:
+        - A corporate IT manager.
+        - Interviewing candidates for ${config.role || 'Class XII / early-career'} roles.
+        - Evaluating communication, attitude, clarity, and intent.
+        - NOT expecting deep technical expertise.
+        
+        Tone:
+        - Polite, Professional, Calm, Evaluative (not friendly coaching).
+        - Persona: ${config.persona || 'Professional'}.
 
-        Strict Rules:
-        1. LANGUAGE: STRICTLY ENGLISH ONLY. Do not process or respond to non-English speech. If the user speaks another language, politely remind them to speak English.
-        2. Keep responses concise (under 2 sentences usually).
-        3. Ask one question at a time.
-        4. Start by welcoming the candidate.
-        5. Evaluate soft skills and technical knowledge.
+        Core Interview Board Rules (MANDATORY):
+        1. Interview-First, Feedback-Later: Do NOT guide or correct answers during the interview. No hints, no examples, no suggestions mid-session. Feedback is delivered only after the interview ends.
+        2. One Question at a Time: Ask a single question. Wait for a complete response. Detect completion via pause.
+        3. Natural Manager Behavior: Use short acknowledgements like “Alright”, “Okay”, “Understood”. Do NOT praise or criticize mid-interview.
+        4. Language: STRICTLY ENGLISH ONLY. If the user speaks another language, politely remind them to speak English.
+
+        Interview Structure (STRICT ORDER):
+        Phase 1: Opening
+        - Say: “Good morning. This interview is for the ${company} program. Please answer clearly and honestly. Let’s begin.”
+        - Pause and wait for the user to acknowledge.
+
+        Phase 2: Core Mandatory Questions
+        Ask exactly in this order:
+        1. “Tell me about yourself.”
+        2. “What do you know about ${company}?”
+        3. “What do you know about the TechBee program, and why did you choose it?”
+        4. “Where do you see yourself in the next five to ten years?”
+        5. “Why do you want to become a software engineer?”
+
+        Phase 3: Controlled Follow-Ups
+        - Ask only ONE follow-up if: Answer is too short, sounds memorized, lacks clarity, or misses intent.
+        - Approved styles: “Can you explain that further?”, “Could you give a specific example?”, “What do you mean by that?”
+        - ❌ Do NOT ask multiple follow-ups.
+        - ❌ Do NOT reframe the question with hints.
+
+        Phase 4: Closing
+        - Say: “Thank you. This concludes the interview.”
+        - Then stop asking questions.
+
+        Question Bank (Use these ONLY if specific deviation is needed or for variation):
+        - “Why do you want to join ${company} specifically?”
+        - “What do you understand about working and studying together?”
+        - “How do you handle pressure or deadlines?”
+        - “What is the difference between software and hardware?”
+        - “What is an operating system?”
       `;
 
       const sessionPromise = ai.live.connect({
@@ -267,7 +299,8 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
                 } 
             } 
           },
-          systemInstruction: { parts: [{ text: systemInstruction }] },
+          // Fix: systemInstruction should be a string directly, not wrapped in parts for the live config
+          systemInstruction: systemInstruction,
           inputAudioTranscription: {},
           outputAudioTranscription: {}
         },
@@ -288,7 +321,7 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
               let sum = 0;
               for(let i=0; i<inputData.length; i++) sum += inputData[i] * inputData[i];
               const rms = Math.sqrt(sum / inputData.length);
-              setAudioLevel(prev => Math.max(prev * 0.85, rms * 8)); // Smoothed audio level
+              setAudioLevel(prev => Math.max(prev * 0.85, rms * 5)); // Boosted responsiveness
 
               const pcmBlob = createBlob(inputData);
               sessionPromise.then((session) => session.sendRealtimeInput({ media: pcmBlob }));
@@ -349,8 +382,6 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
                  nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
                  const audioBuffer = await decodeAudioData(decode(base64Audio), ctx);
                  
-                 // Apply speaking rate if needed (Note: This is a simple playback rate adjustment)
-                 // A true TTS rate change happens on the server, but for fine-tuning we can play with playbackRate
                  const playbackRate = config.speed || 1.0; 
                  
                  const source = ctx.createBufferSource();
@@ -371,7 +402,7 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
           onerror: (err) => {
               console.error("Gemini Live Error", err);
               setIsConnected(false);
-              setError("Connection error. Please try again.");
+              setError("Connection error. Please try again. (Check API Key/Network)");
           }
         }
       });
@@ -447,7 +478,6 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
 
     try {
         setProcessingStep('analyzing');
-        // Fake delay to show the "Processing" state clearly to the user
         await new Promise(resolve => setTimeout(resolve, 1500));
         
         setProcessingStep('generating');
@@ -460,10 +490,10 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
     }
   };
 
-  // --- Processing / Analysis Screen ---
+  // --- Processing Screen ---
   if (processingStep) {
       return (
-          <div className="flex flex-col h-full items-center justify-center bg-slate-950 relative p-6">
+          <div className="flex flex-col h-screen items-center justify-center bg-slate-950 relative p-6">
               <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-950 to-slate-950"></div>
               <div className="z-10 text-center space-y-6 max-w-md w-full animate-fade-in">
                   <div className="relative mx-auto w-24 h-24">
@@ -474,7 +504,7 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
                   
                   <h2 className="text-2xl font-bold text-white">Analysis in Progress</h2>
                   
-                  <div className="space-y-4 text-left bg-slate-900/50 p-6 rounded-xl border border-slate-800">
+                  <div className="space-y-4 text-left bg-slate-900/50 p-6 rounded-xl border border-slate-800 backdrop-blur-sm">
                       <div className={`flex items-center gap-3 ${processingStep === 'uploading' ? 'text-emerald-400' : 'text-slate-500'}`}>
                           <div className={`w-2 h-2 rounded-full ${processingStep === 'uploading' ? 'bg-emerald-400 animate-ping' : 'bg-slate-700'}`}></div>
                           <span>Uploading session data...</span>
@@ -493,24 +523,86 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
       );
   }
 
-  // --- Prep Screen ---
+  // --- Prep Screens (Modernized) ---
   if (prepStage !== 'live') {
     return (
-        <div className="flex flex-col h-full items-center justify-center bg-slate-900 relative p-6">
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-emerald-900/20 via-slate-900 to-slate-900"></div>
-            <div className="z-10 text-center space-y-8 animate-fade-in">
-                {prepStage === 'breath' && <div className="flex flex-col items-center gap-6"><Wind className="w-16 h-16 text-emerald-400 animate-pulse" /><h2 className="text-3xl font-light text-white">Take a deep breath...</h2></div>}
-                {prepStage === 'relax' && <div className="flex flex-col items-center gap-6"><Sparkles className="w-16 h-16 text-blue-400 animate-bounce" /><h2 className="text-3xl font-light text-white">Relax and center yourself.</h2></div>}
-                {prepStage === 'environment' && <div className="flex flex-col items-center gap-6"><Activity className="w-16 h-16 text-purple-400" /><h2 className="text-3xl font-light text-white">Checking environment...</h2></div>}
-                {prepStage === 'countdown' && <span className="text-9xl font-bold text-transparent bg-clip-text bg-gradient-to-b from-emerald-400 to-emerald-600">{countdown}</span>}
-            </div>
+        <div className="flex flex-col h-screen items-center justify-center bg-slate-950 relative p-6 overflow-hidden">
+            {/* Ambient Background */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[100px] pointer-events-none"></div>
+
+            {/* Breath Stage */}
+            {prepStage === 'breath' && (
+                <div className="z-10 flex flex-col items-center justify-center animate-fade-in text-center">
+                     <div className="relative w-48 h-48 mb-12 flex items-center justify-center">
+                         <div className="absolute inset-0 bg-emerald-400/20 rounded-full animate-[ping_4s_ease-in-out_infinite]"></div>
+                         <div className="absolute inset-4 bg-emerald-500/20 rounded-full animate-[pulse_4s_ease-in-out_infinite]"></div>
+                         <Wind className="w-16 h-16 text-emerald-300 relative z-10" />
+                     </div>
+                     <h2 className="text-4xl font-light text-white mb-2">Breathe In...</h2>
+                     <p className="text-slate-400">Center yourself before we begin.</p>
+                </div>
+            )}
+
+            {/* System Check Stage */}
+            {prepStage === 'environment' && (
+                <div className="z-10 w-full max-w-md animate-fade-in">
+                    <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-8 shadow-2xl">
+                        <div className="flex items-center gap-3 mb-6 border-b border-slate-700 pb-4">
+                            <Activity className="text-emerald-400 w-6 h-6" />
+                            <h2 className="text-xl font-semibold text-white">System Check</h2>
+                        </div>
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                                <div className="flex items-center gap-3">
+                                    <Mic className="w-5 h-5 text-slate-400" />
+                                    <span className="text-slate-200">Microphone</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium">
+                                    <Check className="w-4 h-4" /> Ready
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                                <div className="flex items-center gap-3">
+                                    <Wifi className="w-5 h-5 text-slate-400" />
+                                    <span className="text-slate-200">Connection</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium">
+                                    <Check className="w-4 h-4" /> Stable
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                                <div className="flex items-center gap-3">
+                                    <Cpu className="w-5 h-5 text-slate-400" />
+                                    <span className="text-slate-200">Gemini 2.5 AI</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium">
+                                    <Check className="w-4 h-4" /> Online
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <p className="text-center text-slate-500 mt-6 text-sm">Initializing secure environment...</p>
+                </div>
+            )}
+
+            {/* Countdown Stage */}
+            {prepStage === 'countdown' && (
+                <div className="z-10 flex flex-col items-center justify-center animate-fade-in">
+                    <div className="relative">
+                        <div className="text-[180px] font-bold text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-600 leading-none tracking-tighter tabular-nums animate-pulse">
+                            {countdown}
+                        </div>
+                    </div>
+                    <p className="text-xl text-emerald-400 font-medium mt-8 tracking-widest uppercase">Interview Starting</p>
+                </div>
+            )}
         </div>
     );
   }
 
-  // --- Main Call Screen ---
+  // --- Main Live Interface ---
   return (
-    <div className="flex flex-col h-full bg-slate-950 relative overflow-hidden font-sans">
+    <div className="flex flex-col h-screen bg-slate-950 relative overflow-hidden font-sans">
       
       {/* 1. Header Area */}
       <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-start z-20">
@@ -545,9 +637,9 @@ export const InterviewChat: React.FC<InterviewChatProps> = ({ config, onComplete
                 </div>
             )}
 
-            {/* Waveform Visualization */}
-            <div className="w-full max-w-2xl h-32 flex items-center justify-center mb-8">
-                <WaveformVisualizer audioLevel={audioLevel} />
+            {/* NEW Audio Visualizer */}
+            <div className="w-full max-w-2xl flex flex-col items-center justify-center mb-12">
+                <AudioVisualizer audioLevel={audioLevel} />
             </div>
 
             {/* Role Info - Bottom Left of Stage */}
