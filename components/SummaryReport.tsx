@@ -70,7 +70,7 @@ export const SummaryReport: React.FC<SummaryReportProps> = ({ messages, onRestar
       {/* Charts */}
       <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 mb-8">
             <h3 className="text-slate-200 font-medium mb-4">Performance Trend</h3>
-            <div className="h-64 w-full">
+            <div className="h-64 w-full min-h-[250px]">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={analyses}>
                   <defs>
@@ -96,23 +96,29 @@ export const SummaryReport: React.FC<SummaryReportProps> = ({ messages, onRestar
       {/* Detailed Question Review */}
       <div className="space-y-6">
         <h2 className="text-xl font-semibold text-white mb-4">Detailed Question Analysis</h2>
-        {analyses.map((item, idx) => (
-          <div key={idx} className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-            <div className="flex justify-between items-start mb-3">
-              <h4 className="font-semibold text-slate-200">Question {idx + 1}</h4>
-              <div className="flex gap-2">
-                <span className={`px-2 py-1 rounded text-xs font-bold ${
-                    item.score >= 80 ? 'bg-emerald-500/20 text-emerald-400' :
-                    item.score >= 60 ? 'bg-yellow-500/20 text-yellow-400' :
-                    'bg-red-500/20 text-red-400'
-                }`}>
-                    Score: {item.score}
-                </span>
+        {analyses.length > 0 ? (
+          analyses.map((item, idx) => (
+            <div key={idx} className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+              <div className="flex justify-between items-start mb-3">
+                <h4 className="font-semibold text-slate-200">Question {idx + 1}</h4>
+                <div className="flex gap-2">
+                  <span className={`px-2 py-1 rounded text-xs font-bold ${
+                      item.score >= 80 ? 'bg-emerald-500/20 text-emerald-400' :
+                      item.score >= 60 ? 'bg-yellow-500/20 text-yellow-400' :
+                      'bg-red-500/20 text-red-400'
+                  }`}>
+                      Score: {item.score}
+                  </span>
+                </div>
               </div>
+              <p className="text-slate-400 text-sm leading-relaxed">{item.feedback}</p>
             </div>
-            <p className="text-slate-400 text-sm leading-relaxed">{item.feedback}</p>
+          ))
+        ) : (
+          <div className="text-slate-500 text-center py-10 bg-slate-800/30 rounded-lg">
+            No analysis data available. Complete more questions to see trends.
           </div>
-        ))}
+        )}
       </div>
 
       <div className="mt-10 flex justify-center gap-4">

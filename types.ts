@@ -18,7 +18,7 @@ export interface InterviewConfig {
   difficulty: Difficulty;
   company?: string;
   topic?: string;
-  mode: 'standard' | 'stress'; // New mode selection
+  mode: 'standard' | 'stress';
 }
 
 export interface AnalysisResult {
@@ -27,11 +27,11 @@ export interface AnalysisResult {
   clarityScore: number; // 1-10
   confidenceScore: number; // 1-10
   feedback: string;
-  improvedAnswer: string;
+  improvedAnswer?: string;
   keyStrengths: string[];
   keyWeaknesses: string[];
-  nextQuestion: string;
-  isInterviewOver: boolean;
+  nextQuestion?: string; // Optional for final report
+  isInterviewOver?: boolean;
 }
 
 export interface Message {
